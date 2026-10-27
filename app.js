@@ -3,29 +3,39 @@
 let tasks = [];
 let weatherByRegion = {};   // 03 단원에서 지역별 날씨를 넣음
 let tasksReady;
+const supabaseClient = window.supabase && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+  : null;
 
 async function loadTasks() {
   const message = document.getElementById('taskLoadMessage');
-  message.textContent = '일정 목록을 불러오는 중입니다.';
-
-  let baseTasks;
-  try {
-    const response = await fetch('data/tasks.json');
-    if (!response.ok) throw new Error('일정 JSON을 읽지 못했습니다.');
-    baseTasks = await response.json();
-    if (!Array.isArray(baseTasks)) throw new Error('일정 JSON 형식이 올바르지 않습니다.');
-  } catch (error) {
+  message.textContent = 'Supabase에서 일정을 불러오는 중입니다.';
+  if (!supabaseClient) {
     tasks = [];
     renderTasks();
-    message.textContent = '배포 주소로 열어 주세요';
+    message.textContent = window.supabase
+      ? 'config.js에 Supabase URL과 공개용 키를 입력해 주세요.'
+      : 'Supabase 스크립트를 불러오지 못했습니다.';
     return false;
   }
 
-  const saved = JSON.parse(localStorage.getItem('wx_added') || '[]');
-  tasks = baseTasks.concat(Array.isArray(saved) ? saved : []);
-  message.textContent = '';
-  renderTasks();
-  return true;
+  try {
+    const { data, error } = await supabaseClient
+      .from('wx_tasks')
+      .select('id, title, region, kind, owner, created_at')
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
+    if (error) throw error;
+    tasks = data || [];
+    message.textContent = '';
+    renderTasks();
+    return true;
+  } catch (error) {
+    tasks = [];
+    renderTasks();
+    message.textContent = '일정을 불러오지 못했습니다. setup.sql 실행과 config.js 연결 정보를 확인해 주세요.';
+    return false;
+  }
 }
 
 function weatherText(w) {
@@ -54,7 +64,11 @@ function renderTasks() {
 
 async function addTask(e) {
   e.preventDefault();
-  if (!await tasksReady) return;
+  const message = document.getElementById('msgBox');
+  if (!await tasksReady) {
+    message.textContent = 'Supabase에서 일정을 불러온 뒤 다시 시도해 주세요.';
+    return;
+  }
 
   const t = {
     title: document.getElementById('titleInput').value.trim(),
@@ -63,12 +77,21 @@ async function addTask(e) {
     owner: document.getElementById('ownerInput').value.trim(),
   };
   if (!t.title || !t.owner) return;
-  const saved = JSON.parse(localStorage.getItem('wx_added') || '[]');
-  saved.push(t);
-  localStorage.setItem('wx_added', JSON.stringify(saved));
-  e.target.reset();
-  tasks.push(t);
-  renderTasks();
+  message.textContent = '일정을 저장하는 중입니다.';
+  try {
+    const { data, error } = await supabaseClient
+      .from('wx_tasks')
+      .insert([t])
+      .select('id, title, region, kind, owner, created_at')
+      .single();
+    if (error) throw error;
+    tasks.push(data);
+    e.target.reset();
+    message.textContent = '';
+    renderTasks();
+  } catch (error) {
+    message.textContent = '일정을 저장하지 못했습니다. DB 연결과 표 권한을 확인해 주세요.';
+  }
 }
 
 async function loadWeather() {
