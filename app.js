@@ -59,6 +59,31 @@ function addTask(e) {
   renderTasks();
 }
 
+async function loadWeather() {
+  const weatherBox = document.getElementById('weatherBox');
+  weatherBox.textContent = '오늘 날씨를 불러오는 중입니다.';
+
+  const testWind = new URLSearchParams(window.location.search).get('test') === 'wind';
+  const results = await Promise.allSettled(
+    Object.keys(WEATHER_LOCATIONS).map(async (region) => {
+      const response = await fetch(buildWeatherUrl(region));
+      if (!response.ok) throw new Error('날씨 API 응답 오류: ' + response.status);
+      const weather = parseWeatherResponse(await response.json());
+      if (!weather) throw new Error('날씨 응답 형식이 올바르지 않습니다.');
+      if (testWind) weather.windMax = 12;
+      weatherByRegion[region] = weather;
+    })
+  );
+
+  const failedCount = results.filter((result) => result.status === 'rejected').length;
+  weatherBox.textContent = failedCount === 0
+    ? '지역별 오늘 날씨를 일정에 표시했습니다.'
+    : failedCount === results.length
+      ? '날씨를 가져오지 못했습니다. 일정은 표시 중입니다.'
+      : '일부 지역 날씨를 가져오지 못했습니다. 일정은 표시 중입니다.';
+  renderTasks();
+}
+
 const now = new Date();
 document.getElementById('todayDate').textContent = [
   now.getFullYear(),
@@ -69,3 +94,4 @@ document.getElementById('todayDate').textContent = [
 document.getElementById('taskForm').addEventListener('submit', addTask);
 loadTasks();
 renderTasks();
+loadWeather();
