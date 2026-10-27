@@ -59,6 +59,13 @@ function addTask(e) {
   renderTasks();
 }
 
+const now = new Date();
+document.getElementById('todayDate').textContent = [
+  now.getFullYear(),
+  String(now.getMonth() + 1).padStart(2, '0'),
+  String(now.getDate()).padStart(2, '0'),
+].join('-');
+
 document.getElementById('taskForm').addEventListener('submit', addTask);
 loadTasks();
 renderTasks();
